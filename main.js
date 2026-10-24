@@ -1,5 +1,6 @@
-import { Engine } from "./src/engine/Engine.js";
-import { Renderer } from "./src/ui/Renderer.js";
+import { ShipForm } from "./src/ui/ship_form.js";
+import { Engine } from "./src/engine/engine.js";
+import { Renderer } from "./src/ui/renderer.js";
 
 // ============================================================
 // Engine + UI wiring (Part 10.3 lifecycle)
@@ -35,6 +36,7 @@ const engine = new Engine();
 
 // --- UI lifecycle ---
 Renderer.init(engine);
+ShipForm.init(engine);
 Renderer.renderAll(engine.getSnapshot());
 Renderer.subscribe(engine.bus);
 

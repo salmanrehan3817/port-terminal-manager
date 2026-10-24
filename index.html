@@ -29,6 +29,42 @@
       </div>
     </header>
 
+    <!-- ADD SHIP (extra — not in original spec) -->
+    <section class="add-ship-panel">
+      <header class="panel-header">
+        ADD SHIP
+        <button id="toggleAddShip" class="toggle-btn" type="button">−</button>
+      </header>
+      <form id="addShipForm" class="add-ship-form">
+        <input type="text" id="shipIdInput" class="form-input" placeholder="Ship ID (e.g. S10)" required
+          autocomplete="off" />
+        <input type="text" id="shipNameInput" class="form-input" placeholder="Name (e.g. Orion)" required
+          autocomplete="off" />
+        <input type="number" id="shipArrivalInput" class="form-input form-input-sm" placeholder="Arrival" value="10"
+          required />
+        <select id="shipPrioritySelect" class="form-input form-input-sm">
+          <option value="-1">-1 Emergency</option>
+          <option value="0">0 Critical</option>
+          <option value="1">1 High</option>
+          <option value="2" selected>2 Normal</option>
+          <option value="3">3 Low</option>
+          <option value="4">4 Very low</option>
+          <option value="5">5 Bulk</option>
+        </select>
+        <input type="number" id="shipCapacityInput" class="form-input form-input-sm" placeholder="Capacity" value="10"
+          min="1" required />
+        <select id="shipLineSelect" class="form-input form-input-sm">
+          <option value="auto" selected>Auto (fewest)</option>
+          <option value="1">Line 1</option>
+          <option value="2">Line 2</option>
+          <option value="3">Line 3</option>
+          <option value="4">Line 4</option>
+        </select>
+        <button type="submit" class="btn btn-add">Add + Arrive</button>
+        <span id="addShipStatus" class="form-status"></span>
+      </form>
+    </section>
+
     <main class="lines" id="linesContainer"></main>
 
     <section class="at-sea panel">

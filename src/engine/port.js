@@ -97,6 +97,50 @@ export class Port {
         return true;
     }
 
+    // O(n) — arrive and assign to a SPECIFIC line (extra feature — not in spec).
+    // Falls back to at-sea queue if the chosen line is full.
+    shipArrivesOnLine(shipId, lineId) {
+        const ship = this.ships.get(shipId);
+        if (!ship) return false;
+        const seq = this.seq++;
+        return this.assignToSpecificLine(ship, seq, lineId);
+    }
+
+    // O(log n) — enqueue into the chosen line; emit same events as assignToLine
+    assignToSpecificLine(ship, seq, lineId) {
+        const target = this.lines[lineId - 1];
+        if (!target) return false;
+
+        if (target.isFull()) {
+            // Chosen line is full → fall back to at-sea queue
+            this.atSeaQueue.push(ship.priority, seq, ship.id);
+            ship.status = "atSea";
+            ship.currentLineId = null;
+            this._emit("ship:overflown", { shipId: ship.id });
+            return false;
+        }
+
+        target.enqueue(ship, seq);
+        ship.currentLineId = target.id;
+        this._emit("ship:arrived", { shipId: ship.id, lineId: target.id });
+
+        if (target.currentShipId === null) {
+            target.advance();
+            ship.status = "docked";
+            this.dockingHistoryStack.push(ship.id);
+            this._emit("ship:docked", { shipId: ship.id, lineId: target.id });
+        } else {
+            ship.status = "waiting";
+        }
+
+        this._emit("line:updated", {
+            lineId: target.id,
+            snapshot: target.snapshot(this),
+        });
+
+        return true;
+    }
+
     // O(n log n) — fewest ships, tie → lowest ID (Part 4.2)
     assignToLine(ship, seq) {
         let target = null;
