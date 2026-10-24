@@ -1,0 +1,641 @@
+/* ============================================================
+   Port Terminal Manager v2 — UI styling (Part 9.2 layout)
+   ============================================================ */
+
+:root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-hi: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #38bdf8;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+
+    --p-emergency: #ef4444;
+    --p-critical: #f97316;
+    --p-high: #f59e0b;
+    --p-normal: #38bdf8;
+    --p-low: #94a3b8;
+    --p-verylow: #64748b;
+    --p-bulk: #475569;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 100vh;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* ---------------- Toolbar ---------------- */
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.title {
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.search-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 360px;
+}
+
+.search-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+}
+
+.search-input:focus {
+    border-color: var(--accent);
+}
+
+.search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 10;
+}
+
+.search-results .group-label {
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+}
+
+.search-results .result-item {
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.search-results .result-item:hover {
+    background: var(--panel);
+}
+
+.controls {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.speed-select,
+.btn {
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.speed-select:focus,
+.btn:focus {
+    outline: 1px solid var(--accent);
+}
+
+.btn-start {
+    color: var(--ok);
+}
+
+.btn-stop {
+    color: var(--danger);
+}
+
+.btn:hover {
+    background: var(--border);
+}
+
+/* ---------------- 4 Line Columns ---------------- */
+
+.lines {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.line-column {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    min-height: 380px;
+    overflow: hidden;
+}
+
+.line-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--panel-hi);
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 12px;
+    color: var(--accent);
+}
+
+.line-count {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 11px;
+}
+
+.ships-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.line-empty {
+    color: var(--text-dim);
+    font-style: italic;
+    text-align: center;
+    padding: 24px 0;
+    font-size: 12px;
+}
+
+/* ---------------- Ship Card (Part 9.3) ---------------- */
+
+.ship-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ship-card[data-priority="-1"] {
+    border-left-color: var(--p-emergency);
+}
+
+.ship-card[data-priority="0"] {
+    border-left-color: var(--p-critical);
+}
+
+.ship-card[data-priority="1"] {
+    border-left-color: var(--p-high);
+}
+
+.ship-card[data-priority="2"] {
+    border-left-color: var(--p-normal);
+}
+
+.ship-card[data-priority="3"] {
+    border-left-color: var(--p-low);
+}
+
+.ship-card[data-priority="4"] {
+    border-left-color: var(--p-verylow);
+}
+
+.ship-card[data-priority="5"] {
+    border-left-color: var(--p-bulk);
+}
+
+.ship-card[data-state="docked"] {
+    box-shadow: 0 0 0 1px var(--ok) inset;
+}
+
+.ship-card[data-state="loading"],
+.ship-card[data-state="unloading"] {
+    box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.ship-card[data-state="waiting"],
+.ship-card[data-state="ready"] {
+    opacity: 0.85;
+}
+
+.ship-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.ship-id {
+    font-weight: 700;
+    color: var(--accent);
+    font-family: monospace;
+}
+
+.ship-name {
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.priority-badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--panel-hi);
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+.ship-card[data-priority="-1"] .priority-badge {
+    background: var(--p-emergency);
+    color: #fff;
+}
+
+.ship-card[data-priority="0"] .priority-badge {
+    background: var(--p-critical);
+    color: #fff;
+}
+
+.ship-card[data-priority="1"] .priority-badge {
+    background: var(--p-high);
+    color: #1e293b;
+}
+
+.ship-card[data-priority="2"] .priority-badge {
+    background: var(--p-normal);
+    color: #1e293b;
+}
+
+.ship-card[data-priority="3"] .priority-badge {
+    background: var(--p-low);
+    color: #1e293b;
+}
+
+.ship-card[data-priority="4"] .priority-badge {
+    background: var(--p-verylow);
+    color: #fff;
+}
+
+.ship-card[data-priority="5"] .priority-badge {
+    background: var(--p-bulk);
+    color: #fff;
+}
+
+.ship-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.ship-state {
+    font-family: monospace;
+    color: var(--text);
+}
+
+/* Progress bar (Part 9.3) */
+.ship-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--panel-hi);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #22d3ee);
+    transition: width 0.15s linear;
+}
+
+.progress-text {
+    min-width: 34px;
+    text-align: right;
+    font-family: monospace;
+    color: var(--text-dim);
+}
+
+.ship-container {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.ship-container .container-id {
+    font-family: monospace;
+    color: var(--accent);
+}
+
+/* ---------------- Bottom panels (at-sea, routes, yard) ---------------- */
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.panel-header {
+    padding: 8px 12px;
+    background: var(--panel-hi);
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 12px;
+    color: var(--accent);
+}
+
+.at-sea .panel-header {
+    color: var(--warn);
+}
+
+.at-sea-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+    min-height: 44px;
+}
+
+.at-sea-list:empty::after {
+    content: "— empty —";
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: monospace;
+}
+
+.routes-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.routes-edges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.route-chip {
+    padding: 4px 10px;
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+}
+
+.routes-reachable {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.routes-select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.routes-reachable-list {
+    font-family: monospace;
+    color: var(--accent);
+}
+
+.routes-unique {
+    color: var(--text-dim);
+}
+
+.routes-unique span {
+    color: var(--text);
+    font-family: monospace;
+}
+
+.yard-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+    min-height: 44px;
+}
+
+.yard-list:empty::after {
+    content: "— empty —";
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+/* ---------------- Responsive ---------------- */
+
+@media (max-width: 1100px) {
+    .lines {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .lines {
+        grid-template-columns: 1fr;
+    }
+
+    .toolbar {
+        flex-wrap: wrap;
+    }
+
+    .controls {
+        margin-left: 0;
+    }
+}
+
+.routes-empty {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 11px;
+}
+
+/* ============================================================
+   Step 9 — At-sea + Yard panel polish
+   ============================================================ */
+
+/* At-sea chips — priority colors */
+.at-sea-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 4px solid var(--border);
+    padding: 4px 10px 4px 8px;
+}
+
+.at-sea-chip[data-priority="-1"] {
+    border-left-color: var(--p-emergency);
+}
+
+.at-sea-chip[data-priority="0"] {
+    border-left-color: var(--p-critical);
+}
+
+.at-sea-chip[data-priority="1"] {
+    border-left-color: var(--p-high);
+}
+
+.at-sea-chip[data-priority="2"] {
+    border-left-color: var(--p-normal);
+}
+
+.at-sea-chip[data-priority="3"] {
+    border-left-color: var(--p-low);
+}
+
+.at-sea-chip[data-priority="4"] {
+    border-left-color: var(--p-verylow);
+}
+
+.at-sea-chip[data-priority="5"] {
+    border-left-color: var(--p-bulk);
+}
+
+.at-sea-id {
+    font-family: monospace;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.at-sea-name {
+    color: var(--text);
+    font-style: italic;
+}
+
+.at-sea-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    padding-left: 6px;
+    border-left: 1px solid var(--border);
+}
+
+.at-sea-chip[data-priority="-1"] .at-sea-label {
+    color: var(--p-emergency);
+}
+
+.at-sea-chip[data-priority="0"] .at-sea-label {
+    color: var(--p-critical);
+}
+
+.at-sea-chip[data-priority="1"] .at-sea-label {
+    color: var(--p-high);
+}
+
+/* Yard chips — richer info */
+.yard-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.yard-id {
+    font-family: monospace;
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.yard-weight {
+    color: var(--text);
+    font-family: monospace;
+}
+
+.yard-dest {
+    color: var(--text-dim);
+    font-size: 10px;
+    padding-left: 6px;
+    border-left: 1px solid var(--border);
+}
+
+/* Empty state — larger, centered */
+.at-sea-list:empty::after,
+.yard-list:empty::after {
+    display: block;
+    text-align: center;
+    width: 100%;
+    padding: 6px 0;
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+}

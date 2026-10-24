@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Terminal Manager v2</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <span class="title">PORT TERMINAL</span>
+      <div class="search-wrap">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search containers / ships…"
+          autocomplete="off" />
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+      <div class="controls">
+        <select id="speedSelect" class="speed-select">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+        <button id="startBtn" class="btn btn-start">Start</button>
+        <button id="stopBtn" class="btn btn-stop">Stop</button>
+      </div>
+    </header>
+
+    <main class="lines" id="linesContainer"></main>
+
+    <section class="at-sea panel">
+      <header class="panel-header">AT SEA (overflow)</header>
+      <div class="at-sea-list" id="atSeaList"></div>
+    </section>
+
+    <section class="routes panel">
+      <header class="panel-header">ROUTES</header>
+      <div class="routes-body">
+        <div class="routes-edges" id="routesEdges"></div>
+        <div class="routes-reachable">
+          <label for="routesSelect">Reachable from:</label>
+          <select id="routesSelect" class="routes-select"></select>
+          <span id="routesReachable" class="routes-reachable-list">—</span>
+        </div>
+        <div class="routes-unique">
+          Unique destinations: <span id="routesUnique">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="yard panel">
+      <header class="panel-header">YARD</header>
+      <div class="yard-list" id="yardList"></div>
+    </section>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+
+</html>
