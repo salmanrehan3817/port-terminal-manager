@@ -1,37 +1,52 @@
 // Trie-backed prefix search (Part 9.4).
-// On every keystroke calls engine.searchContainersByPrefix + engine.searchShipsByPrefix.
-// No engine events — synchronous calls.
+// Click a result → opens DetailModal (ship or container).
+
+import { DetailModal } from "./detail_model.js";
 
 export class SearchBar {
-    // O(1) — cache elements + wire input events
     static init(engine, inputEl, resultsEl) {
         this.engine = engine;
         this.inputEl = inputEl;
         this.resultsEl = resultsEl;
+
+        if (!this.inputEl || !this.resultsEl) {
+            console.error("SearchBar: missing DOM elements");
+            return;
+        }
 
         this.inputEl.addEventListener("input", () => this._onInput());
         this.inputEl.addEventListener("focus", () => {
             if (this.inputEl.value.trim()) this._onInput();
         });
         this.inputEl.addEventListener("blur", () => {
-            // Delay so a click on a result still registers
-            setTimeout(() => this._hide(), 150);
+            setTimeout(() => this._hide(), 200);
         });
         this.inputEl.addEventListener("keydown", (ev) => {
             if (ev.key === "Escape") this._hide();
         });
+
+        // Click on a result item → open detail modal
+        this.resultsEl.addEventListener("mousedown", (ev) => {
+            const item = ev.target.closest(".result-item");
+            if (!item) return;
+            const type = item.dataset.resultType;
+            const id = item.dataset.resultId;
+            if (type === "ship") {
+                DetailModal.showShip(id);
+            } else if (type === "container") {
+                DetailModal.showContainer(id);
+            }
+            this.inputEl.value = "";
+            this._hide();
+        });
     }
 
-    // O(p + k) — prefix lookups in both tries
     static _onInput() {
         const prefix = this.inputEl.value.trim();
-        if (!prefix) {
-            this._hide();
-            return;
-        }
+        if (!prefix) { this._hide(); return; }
 
-        const containers = this.engine.searchContainersByPrefix(prefix);
-        const ships = this.engine.searchShipsByPrefix(prefix);
+        const containers = this.engine.searchContainersByPrefix(prefix) || [];
+        const ships = this.engine.searchShipsByPrefix(prefix) || [];
 
         if (containers.length === 0 && ships.length === 0) {
             this._hide();
@@ -42,13 +57,13 @@ export class SearchBar {
         if (containers.length) {
             parts.push(`<div class="group-label">Containers (${containers.length})</div>`);
             for (const id of containers) {
-                parts.push(`<div class="result-item">${this._escape(id)}</div>`);
+                parts.push(`<div class="result-item" data-result-type="container" data-result-id="${this._escape(id)}">${this._escape(id)}</div>`);
             }
         }
         if (ships.length) {
             parts.push(`<div class="group-label">Ships (${ships.length})</div>`);
             for (const id of ships) {
-                parts.push(`<div class="result-item">${this._escape(id)}</div>`);
+                parts.push(`<div class="result-item" data-result-type="ship" data-result-id="${this._escape(id)}">${this._escape(id)}</div>`);
             }
         }
 
@@ -56,12 +71,11 @@ export class SearchBar {
         this.resultsEl.classList.remove("hidden");
     }
 
-    // O(1)
     static _hide() {
+        if (!this.resultsEl) return;
         this.resultsEl.classList.add("hidden");
     }
 
-    // O(n)
     static _escape(str) {
         return String(str).replace(/[&<>"']/g, (c) => ({
             "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",

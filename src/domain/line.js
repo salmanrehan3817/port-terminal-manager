@@ -101,6 +101,7 @@ export class Line {
             used: ship.containerCount(),
             activeContainerId: ship.activeContainerId,
             progress: ship.progress,
+            containers: ship.listContainers(),
         };
     }
 }

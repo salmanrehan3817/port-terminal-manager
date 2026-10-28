@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Terminal Manager v2</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <span class="title">PORT TERMINAL</span>
+      <div class="search-wrap">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search containers / ships…"
+          autocomplete="off" />
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+      <div class="controls">
+        <select id="speedSelect" class="speed-select">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+        <button id="startBtn" class="btn btn-start">Start</button>
+        <button id="stopBtn" class="btn btn-stop">Stop</button>
+      </div>
+    </header>
+
+    <!-- ==================== ADD SHIP ==================== -->
+    <section class="add-ship-panel">
+      <header class="panel-header">
+        ADD SHIP
+        <button id="toggleAddShip" class="toggle-btn" type="button">−</button>
+      </header>
+      <form id="addShipForm" class="add-ship-form">
+        <input type="text" id="shipIdInput" class="form-input" placeholder="Ship ID (e.g. S10)" required
+          autocomplete="off" />
+        <input type="text" id="shipNameInput" class="form-input" placeholder="Name (e.g. Orion)" required
+          autocomplete="off" />
+        <input type="number" id="shipArrivalInput" class="form-input form-input-sm" placeholder="Arrival" value="10"
+          required />
+        <select id="shipPrioritySelect" class="form-input form-input-sm">
+          <option value="-1">-1 Emergency</option>
+          <option value="0">0 Critical</option>
+          <option value="1">1 High</option>
+          <option value="2" selected>2 Normal</option>
+          <option value="3">3 Low</option>
+          <option value="4">4 Very low</option>
+          <option value="5">5 Bulk</option>
+        </select>
+        <input type="number" id="shipCapacityInput" class="form-input form-input-sm" placeholder="Capacity" value="10"
+          min="1" required />
+        <select id="shipLineSelect" class="form-input form-input-sm">
+          <option value="auto" selected>Auto (fewest)</option>
+          <option value="1">Line 1</option>
+          <option value="2">Line 2</option>
+          <option value="3">Line 3</option>
+          <option value="4">Line 4</option>
+        </select>
+        <button type="submit" class="btn btn-add">Add + Arrive</button>
+        <span id="addShipStatus" class="form-status"></span>
+      </form>
+    </section>
+
+    <!-- ==================== ADD CONTAINER (SEPARATE) ==================== -->
+    <section class="add-ship-panel">
+      <header class="panel-header">
+        ADD CONTAINER
+        <button id="toggleAddContainer" class="toggle-btn" type="button">−</button>
+      </header>
+      <form id="addContainerForm" class="add-ship-form">
+
+        <div class="form-field">
+          <label for="containerIdInput" class="form-label">Container Name</label>
+          <input type="text" id="containerIdInput" class="form-input" placeholder="e.g. C10" required
+            autocomplete="off" />
+        </div>
+
+        <div class="form-field">
+          <label for="containerWeightInput" class="form-label">Weight</label>
+          <input type="number" id="containerWeightInput" class="form-input" placeholder="e.g. 15" value="10" min="1"
+            required />
+        </div>
+
+        <div class="form-field">
+          <label for="containerDestInput" class="form-label">Destination</label>
+          <input type="text" id="containerDestInput" class="form-input" placeholder="e.g. A" value="A" required
+            autocomplete="off" />
+        </div>
+
+        <div class="form-field form-field-btn">
+          <label class="form-label">&nbsp;</label>
+          <button type="submit" class="btn btn-add">Add Container</button>
+        </div>
+
+        <span id="addContainerStatus" class="form-status"></span>
+      </form>
+    </section>
+
+    <!-- ==================== 4 LINES ==================== -->
+    <main class="lines" id="linesContainer"></main>
+
+    <!-- ==================== AT SEA ==================== -->
+    <section class="at-sea panel">
+      <header class="panel-header">AT SEA (overflow)</header>
+      <div class="at-sea-list" id="atSeaList"></div>
+    </section>
+
+    <!-- ==================== ROUTES ==================== -->
+    <section class="routes panel">
+      <header class="panel-header">ROUTES</header>
+      <div class="routes-body">
+        <div class="routes-edges" id="routesEdges"></div>
+        <div class="routes-reachable">
+          <label for="routesSelect">Reachable from:</label>
+          <select id="routesSelect" class="routes-select"></select>
+          <span id="routesReachable" class="routes-reachable-list">—</span>
+        </div>
+        <div class="routes-unique">
+          Unique destinations: <span id="routesUnique">—</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== YARD ==================== -->
+    <section class="yard panel">
+      <header class="panel-header">YARD</header>
+      <div class="yard-list" id="yardList"></div>
+    </section>
+
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+
+</html>

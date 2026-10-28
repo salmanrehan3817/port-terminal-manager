@@ -7,6 +7,12 @@ export class ShipForm {
     static init(engine) {
         this.engine = engine;
         this.form = document.getElementById("addShipForm");
+
+        if (!this.form) {
+            console.warn("Add Ship form not found in DOM — skipping.");
+            return;
+        }
+
         this.statusEl = document.getElementById("addShipStatus");
         this.toggleBtn = document.getElementById("toggleAddShip");
 

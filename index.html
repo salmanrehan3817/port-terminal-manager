@@ -29,49 +29,119 @@
       </div>
     </header>
 
-    <!-- ADD SHIP (extra — not in original spec) -->
+    <!-- ==================== ADD SHIP ==================== -->
     <section class="add-ship-panel">
       <header class="panel-header">
         ADD SHIP
         <button id="toggleAddShip" class="toggle-btn" type="button">−</button>
       </header>
       <form id="addShipForm" class="add-ship-form">
-        <input type="text" id="shipIdInput" class="form-input" placeholder="Ship ID (e.g. S10)" required
-          autocomplete="off" />
-        <input type="text" id="shipNameInput" class="form-input" placeholder="Name (e.g. Orion)" required
-          autocomplete="off" />
-        <input type="number" id="shipArrivalInput" class="form-input form-input-sm" placeholder="Arrival" value="10"
-          required />
-        <select id="shipPrioritySelect" class="form-input form-input-sm">
-          <option value="-1">-1 Emergency</option>
-          <option value="0">0 Critical</option>
-          <option value="1">1 High</option>
-          <option value="2" selected>2 Normal</option>
-          <option value="3">3 Low</option>
-          <option value="4">4 Very low</option>
-          <option value="5">5 Bulk</option>
-        </select>
-        <input type="number" id="shipCapacityInput" class="form-input form-input-sm" placeholder="Capacity" value="10"
-          min="1" required />
-        <select id="shipLineSelect" class="form-input form-input-sm">
-          <option value="auto" selected>Auto (fewest)</option>
-          <option value="1">Line 1</option>
-          <option value="2">Line 2</option>
-          <option value="3">Line 3</option>
-          <option value="4">Line 4</option>
-        </select>
-        <button type="submit" class="btn btn-add">Add + Arrive</button>
+
+        <div class="form-field">
+          <label for="shipIdInput" class="form-label">Ship ID</label>
+          <input type="text" id="shipIdInput" class="form-input" placeholder="e.g. S10" required autocomplete="off" />
+        </div>
+
+        <div class="form-field">
+          <label for="shipNameInput" class="form-label">Name</label>
+          <input type="text" id="shipNameInput" class="form-input" placeholder="e.g. Orion" required
+            autocomplete="off" />
+        </div>
+
+        <div class="form-field">
+          <label for="shipArrivalInput" class="form-label">Arrival</label>
+          <input type="number" id="shipArrivalInput" class="form-input" placeholder="10" value="10" required />
+        </div>
+
+        <div class="form-field">
+          <label for="shipPrioritySelect" class="form-label">Priority</label>
+          <select id="shipPrioritySelect" class="form-input">
+            <option value="-1">-1 Emergency</option>
+            <option value="0">0 Critical</option>
+            <option value="1">1 High</option>
+            <option value="2" selected>2 Normal</option>
+            <option value="3">3 Low</option>
+            <option value="4">4 Very low</option>
+            <option value="5">5 Bulk</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="shipCapacityInput" class="form-label">Capacity</label>
+          <input type="number" id="shipCapacityInput" class="form-input" placeholder="10" value="10" min="1" required />
+        </div>
+
+        <div class="form-field">
+          <label for="shipLineSelect" class="form-label">Line</label>
+          <select id="shipLineSelect" class="form-input">
+            <option value="auto" selected>Auto (fewest)</option>
+            <option value="1">Line 1</option>
+            <option value="2">Line 2</option>
+            <option value="3">Line 3</option>
+            <option value="4">Line 4</option>
+          </select>
+        </div>
+
+        <div class="form-field form-field-btn">
+          <label class="form-label">&nbsp;</label>
+          <button type="submit" class="btn btn-add">Add + Arrive</button>
+        </div>
+
         <span id="addShipStatus" class="form-status"></span>
       </form>
     </section>
 
+    <!-- ==================== ADD CONTAINER (SEPARATE) ==================== -->
+    <section class="add-ship-panel">
+      <header class="panel-header">
+        ADD CONTAINER
+        <button id="toggleAddContainer" class="toggle-btn" type="button">−</button>
+      </header>
+      <form id="addContainerForm" class="add-ship-form">
+
+        <div class="form-field">
+          <label for="containerIdInput" class="form-label">Container Name</label>
+          <input type="text" id="containerIdInput" class="form-input" placeholder="e.g. C10" required
+            autocomplete="off" />
+        </div>
+
+        <div class="form-field">
+          <label for="containerWeightInput" class="form-label">Weight</label>
+          <input type="number" id="containerWeightInput" class="form-input" placeholder="e.g. 15" value="10" min="1"
+            required />
+        </div>
+
+        <div class="form-field">
+          <label for="containerDestInput" class="form-label">Destination</label>
+          <input type="text" id="containerDestInput" class="form-input" placeholder="e.g. A" value="A" required
+            autocomplete="off" />
+        </div>
+
+        <div class="form-field form-field-btn">
+          <label class="form-label">&nbsp;</label>
+          <button type="submit" class="btn btn-add">Add Container</button>
+        </div>
+
+        <span id="addContainerStatus" class="form-status"></span>
+      </form>
+    </section>
+
+    <!-- ==================== 4 LINES ==================== -->
     <main class="lines" id="linesContainer"></main>
 
+    <!-- ==================== AT SEA ==================== -->
     <section class="at-sea panel">
       <header class="panel-header">AT SEA (overflow)</header>
       <div class="at-sea-list" id="atSeaList"></div>
     </section>
 
+    <!-- ==================== PROCESSING ==================== -->
+    <section class="processing-panel panel">
+      <header class="panel-header">PROCESSING (loaded · ready to unload or depart)</header>
+      <div class="processing-list" id="processingList"></div>
+    </section>
+
+    <!-- ==================== ROUTES ==================== -->
     <section class="routes panel">
       <header class="panel-header">ROUTES</header>
       <div class="routes-body">
@@ -87,10 +157,23 @@
       </div>
     </section>
 
+    <!-- ==================== YARD ==================== -->
     <section class="yard panel">
       <header class="panel-header">YARD</header>
       <div class="yard-list" id="yardList"></div>
     </section>
+
+  </div>
+
+  <!-- ==================== DETAIL MODAL ==================== -->
+  <div id="detailModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <header class="modal-header">
+        <span id="modalTitle" class="modal-title">Detail</span>
+        <button id="modalClose" class="modal-close" type="button">×</button>
+      </header>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
   </div>
 
   <script type="module" src="main.js"></script>

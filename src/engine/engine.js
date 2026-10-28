@@ -13,17 +13,15 @@ export class Engine {
         this.running = false;
         this.timer = null;
         this.autoDrive = true;
-        this._shipPhase = new Map(); // shipId → "loading" | "unloading"
+        this._shipPhase = new Map();
     }
 
-    // O(1)
     start() {
         if (this.running) return;
         this.running = true;
         this.timer = setInterval(() => this.tick(), this.tickMs);
     }
 
-    // O(1)
     stop() {
         if (!this.running) return;
         this.running = false;
@@ -31,60 +29,63 @@ export class Engine {
         this.timer = null;
     }
 
-    // O(1)
     setSpeed(multiplier) {
         if (!SPEED_OPTIONS.has(multiplier)) return false;
         this.speed = multiplier;
         return true;
     }
 
-    // O(1)
     setAutoDrive(enabled) {
         this.autoDrive = !!enabled;
         return this.autoDrive;
     }
 
-    // O(n) — advance sim + update progress + auto-drive
     tick() {
-        this.port.simTime += this.tickMs * this.speed;
-        this.port.updateProgress();
-        if (this.autoDrive) this._autoLoadNext();
-        this.bus.emit("engine:tick", { simTime: this.port.simTime });
+        try {
+            this.port.simTime += this.tickMs * this.speed;
+            this.port.updateProgress();
+            if (this.autoDrive) this._autoLoadNext();
+            this.bus.emit("engine:tick", { simTime: this.port.simTime });
+        } catch (err) {
+            console.error("Simulation tick error:", err);
+        }
     }
 
-    // O(lines × queue) — GLOBAL priority processing across all lines.
-    // Picks the highest-priority ship among ALL ships (active + waiting).
-    // If the winner is waiting, preempts its line (swaps with current active).
-    // This is a DEVIATION from Part 4.3 (no-preemption) — done to fulfill
-    // the "priority-based" requirement requested by the user.
     _autoLoadNext() {
-        // 1. Never interrupt a load/unload in progress
-        for (const line of this.port.lines) {
-            if (line.currentShipId === null) continue;
-            const s = this.port.ships.get(line.currentShipId);
-            if (s && (s.status === "loading" || s.status === "unloading")) {
-                return;
+        // 🚨 FIX: 1. Sab se pehle processing wali ships ko check karein
+        // Agar ship "processing" ya "ready" hai, toh usay foran depart kar dein
+        for (const ship of [...this.port.processingShips.values()]) {
+            if (ship.status === "processing" || ship.status === "ready") {
+                this.port.depart(ship.id);
             }
         }
 
-        // 2. Collect ALL idle ships (active + waiting) across all lines
+        // 2. Agar koi ship load/unload ho rahi hai toh interrupt na karein
+        for (const line of this.port.lines) {
+            if (line.currentShipId === null) continue;
+            const s = this.port.ships.get(line.currentShipId);
+            if (s && (s.status === "loading" || s.status === "unloading")) return;
+        }
+        for (const s of this.port.processingShips.values()) {
+            if (s.status === "loading" || s.status === "unloading") return;
+        }
+
+        // 3. Agar yard empty hai toh loading rok dein
+        if (this.port.yard.size() === 0) return;
+
+        // 4. Collect candidate ships (active + waiting in lines)
         const candidates = [];
         for (const line of this.port.lines) {
             if (line.currentShipId !== null) {
                 const s = this.port.ships.get(line.currentShipId);
-                if (s && s.status !== "departed") {
-                    candidates.push({ ship: s, line, isActive: true });
-                }
+                if (s && !s.isFull()) candidates.push({ ship: s, line, isActive: true });
             }
-            // Peek waiting ships without consuming
             const drained = [];
             while (!line.ships.isEmpty()) {
                 const item = line.ships.pop();
                 drained.push(item);
                 const s = this.port.ships.get(item.shipId);
-                if (s && s.status !== "departed") {
-                    candidates.push({ ship: s, line, isActive: false });
-                }
+                if (s && !s.isFull()) candidates.push({ ship: s, line, isActive: false });
             }
             for (const item of drained) {
                 line.ships.push(item.priority, item.seq, item.shipId);
@@ -92,50 +93,40 @@ export class Engine {
         }
         if (candidates.length === 0) return;
 
-        // 3. Global priority sort (lower priority number = more urgent)
+        // 5. Sort by priority
         candidates.sort((a, b) => {
             if (a.ship.priority !== b.ship.priority) return a.ship.priority - b.ship.priority;
             if (a.ship.arrival !== b.ship.arrival) return a.ship.arrival - b.ship.arrival;
             return a.ship.id < b.ship.id ? -1 : 1;
         });
 
-        // 4. Pick highest priority
-        const { ship, line, isActive } = candidates[0];
+        const chosen = candidates[0];
 
-        // 5. If winning ship is waiting, preempt its line
-        if (!isActive) this._preempt(line, ship.id);
+        // 6. Preempt if chosen is waiting
+        if (!chosen.isActive) this._preempt(chosen.line, chosen.ship.id);
 
-        // 6. Process one phase-step for this ship
-        let phase = this._shipPhase.get(ship.id);
-        if (!phase) {
-            phase = "loading";
-            this._shipPhase.set(ship.id, phase);
+        // 7. FIFO — get next container from yardQueue (skip stale entries)
+        let nextId = null;
+        while (!this.port.yardQueue.isEmpty()) {
+            const front = this.port.yardQueue.front();
+            if (this.port.yard.has(front)) { nextId = front; break; }
+            this.port.yardQueue.dequeue();
         }
+        if (!nextId) return;
 
-        if (phase === "loading") {
-            const yard = this.port.yard.values();
-            if (!ship.isFull() && yard.length > 0) {
-                this.port.startLoading(ship.id, yard[0].id);
-            } else {
-                this._shipPhase.set(ship.id, "unloading");
-            }
+        // 8. Start loading; dequeue from FIFO ONLY on success
+        const ok = this.port.startLoading(chosen.ship.id, nextId);
+        if (ok) {
+            this.port.yardQueue.dequeue();
         } else {
-            if (!ship.isEmpty()) {
-                this.port.startUnloading(ship.id);
-            } else {
-                this.port.depart(ship.id);
-                this._shipPhase.delete(ship.id);
-            }
+            if (this.port.yardQueue.front() === nextId) this.port.yardQueue.dequeue();
         }
     }
 
-    // O(queue) — Swap a waiting ship with the line's current active ship.
-    // The previous active goes back to waiting with a fresh seq (fair FIFO).
     _preempt(line, targetShipId) {
         const prevActiveId = line.currentShipId;
         if (prevActiveId === targetShipId) return;
 
-        // Remove target from waiting queue
         const drainItems = [];
         let found = false;
         while (!line.ships.isEmpty()) {
@@ -146,12 +137,10 @@ export class Engine {
                 drainItems.push(item);
             }
         }
-        // Restore remaining waiting ships
         for (const it of drainItems) {
             line.ships.push(it.priority, it.seq, it.shipId);
         }
 
-        // Demote previous active → waiting (fresh seq keeps it fair)
         if (prevActiveId) {
             const prev = this.port.ships.get(prevActiveId);
             if (prev) {
@@ -161,7 +150,6 @@ export class Engine {
             }
         }
 
-        // Promote target → active
         line.currentShipId = targetShipId;
         const target = this.port.ships.get(targetShipId);
         if (target) target.status = "docked";
@@ -169,7 +157,6 @@ export class Engine {
 
     getSnapshot() { return this.port.snapshot(); }
 
-    // Action methods
     addShip(shipId, name, arrival, priority = 2, capacity = 10) {
         return this.port.addShip(shipId, name, arrival, priority, capacity);
     }
@@ -184,7 +171,6 @@ export class Engine {
     depart(shipId) { return this.port.depart(shipId); }
     undoUnload() { return this.port.undoUnload(); }
 
-    // Query methods
     reachableDestinations(start) { return this.port.reachableDestinations(start); }
     searchContainersByPrefix(prefix) { return this.port.searchContainersByPrefix(prefix); }
     searchShipsByPrefix(prefix) { return this.port.searchShipsByPrefix(prefix); }

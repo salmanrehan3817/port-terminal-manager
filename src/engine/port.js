@@ -15,46 +15,46 @@ const LINE_COUNT = 4;
 const LINE_CAPACITY = 8;
 const PRIORITY_MIN = -1;
 const PRIORITY_MAX = 5;
+const HISTORY_CAP = 100;
 
-// Part 6.1 — exported so Engine/UI can reference the same constants
 export const LOAD_DURATION_MS = 2000;
 export const UNLOAD_DURATION_MS = 2000;
 
 export class Port {
     constructor(bus = null) {
-        this.bus = bus; // optional EventBus; null disables emissions
-
+        this.bus = bus;
         this.lines = [];
-        for (let i = 1; i <= LINE_COUNT; i++) {
-            this.lines.push(new Line(i, LINE_CAPACITY));
-        }
+        for (let i = 1; i <= LINE_COUNT; i++) this.lines.push(new Line(i, LINE_CAPACITY));
         this.ships = new HashMap();
         this.containers = new HashMap();
         this.containersByShip = new HashMap();
         this.yard = new HashMap();
         this.yardQueue = new Queue();
         this.atSeaQueue = new PriorityQueue();
+        this.processingShips = new HashMap();
         this.unloadStack = new Stack();
         this.dockingHistoryStack = new Stack();
-
         this.arrivalIndex = new BST();
         this.destGraph = new Graph();
         this.containerTrie = new Trie();
         this.shipTrie = new Trie();
         this.uniqueDestSet = new Set();
-
         this.seq = 0;
         this.simTime = 0;
     }
 
-    // O(1) — safe emit (no-op if no bus)
-    _emit(event, payload) {
-        if (this.bus) this.bus.emit(event, payload);
+    _emit(event, payload) { if (this.bus) this.bus.emit(event, payload); }
+
+    _pushShipHistory(ship, action, info) {
+        ship.history.push({ time: this.simTime, action, info });
+        if (ship.history.length > HISTORY_CAP) ship.history.shift();
     }
 
-    // ---------- Creation ----------
+    _pushContainerHistory(container, action, info) {
+        container.history.push({ time: this.simTime, action, info });
+        if (container.history.length > HISTORY_CAP) container.history.shift();
+    }
 
-    // O(1) avg
     addShip(shipId, name, arrival, priority = 2, capacity = 10) {
         if (priority < PRIORITY_MIN || priority > PRIORITY_MAX) return false;
         if (this.ships.has(shipId)) return false;
@@ -62,11 +62,11 @@ export class Port {
         this.ships.put(shipId, ship);
         this.arrivalIndex.insert([arrival, shipId], shipId);
         this.shipTrie.insert(shipId);
+        this._pushShipHistory(ship, "created", `priority ${priority}, capacity ${capacity}`);
         this._emit("data:updated", { kind: "ship" });
         return true;
     }
 
-    // O(1) avg
     addContainer(containerId, weight, dest) {
         if (this.containers.has(containerId)) return false;
         const c = new Container(containerId, weight, dest);
@@ -76,87 +76,62 @@ export class Port {
         this.containerTrie.insert(containerId);
         this.uniqueDestSet.add(dest);
         this.destGraph.addNode(dest);
+        this._pushContainerHistory(c, "created", `weight ${weight} → ${dest}`);
         this._emit("data:updated", { kind: "container" });
         return true;
     }
 
-    // O(1)
     addRoute(fromDest, toDest) {
         this.destGraph.addEdge(fromDest, toDest);
         this._emit("data:updated", { kind: "route" });
     }
 
-    // ---------- Assignment ----------
-
-    // O(n)
     shipArrives(shipId) {
         const ship = this.ships.get(shipId);
         if (!ship) return false;
-        const seq = this.seq++;
-        this.assignToLine(ship, seq);
+        this.assignToLine(ship, this.seq++);
         return true;
     }
 
-    // O(n) — arrive and assign to a SPECIFIC line (extra feature — not in spec).
-    // Falls back to at-sea queue if the chosen line is full.
     shipArrivesOnLine(shipId, lineId) {
         const ship = this.ships.get(shipId);
         if (!ship) return false;
-        const seq = this.seq++;
-        return this.assignToSpecificLine(ship, seq, lineId);
+        return this.assignToSpecificLine(ship, this.seq++, lineId);
     }
 
-    // O(log n) — enqueue into the chosen line; emit same events as assignToLine
-    assignToSpecificLine(ship, seq, lineId) {
-        const target = this.lines[lineId - 1];
-        if (!target) return false;
-
-        if (target.isFull()) {
-            // Chosen line is full → fall back to at-sea queue
-            this.atSeaQueue.push(ship.priority, seq, ship.id);
-            ship.status = "atSea";
-            ship.currentLineId = null;
-            this._emit("ship:overflown", { shipId: ship.id });
-            return false;
-        }
-
-        target.enqueue(ship, seq);
-        ship.currentLineId = target.id;
-        this._emit("ship:arrived", { shipId: ship.id, lineId: target.id });
-
-        if (target.currentShipId === null) {
-            target.advance();
-            ship.status = "docked";
-            this.dockingHistoryStack.push(ship.id);
-            this._emit("ship:docked", { shipId: ship.id, lineId: target.id });
-        } else {
-            ship.status = "waiting";
-        }
-
-        this._emit("line:updated", {
-            lineId: target.id,
-            snapshot: target.snapshot(this),
-        });
-
-        return true;
-    }
-
-    // O(n log n) — fewest ships, tie → lowest ID (Part 4.2)
     assignToLine(ship, seq) {
         let target = null;
         for (const line of this.lines) {
             if (line.isFull()) continue;
             if (target === null || line.size() < target.size()) target = line;
         }
-
         if (target === null) {
             this.atSeaQueue.push(ship.priority, seq, ship.id);
-            ship.status = "atSea";
+            ship.status = "waitingAtSea";
             ship.currentLineId = null;
+            this._pushShipHistory(ship, "overflown", "all lines full → at sea");
             this._emit("ship:overflown", { shipId: ship.id });
             return;
         }
+        this._enqueueIntoTarget(target, ship, seq);
+    }
 
+    assignToSpecificLine(ship, seq, lineId) {
+        const target = this.lines[lineId - 1];
+        if (!target) return false;
+        if (target.isFull()) {
+            this.atSeaQueue.push(ship.priority, seq, ship.id);
+            ship.status = "waitingAtSea";
+            ship.currentLineId = null;
+            this._pushShipHistory(ship, "overflown", `line ${lineId} full → at sea`);
+            this._emit("ship:overflown", { shipId: ship.id });
+            return false;
+        }
+        this._enqueueIntoTarget(target, ship, seq);
+        return true;
+    }
+
+    _enqueueIntoTarget(target, ship, seq) {
         target.enqueue(ship, seq);
         ship.currentLineId = target.id;
         this._emit("ship:arrived", { shipId: ship.id, lineId: target.id });
@@ -165,54 +140,123 @@ export class Port {
             target.advance();
             ship.status = "docked";
             this.dockingHistoryStack.push(ship.id);
+            this._pushShipHistory(ship, "docked", `line ${target.id}`);
             this._emit("ship:docked", { shipId: ship.id, lineId: target.id });
         } else {
             ship.status = "waiting";
+            this._pushShipHistory(ship, "waiting", `line ${target.id}`);
         }
         this._emit("line:updated", { lineId: target.id, snapshot: target.snapshot(this) });
     }
 
-    // O(log n) — Part 4.4 + 4.5 + 4.6
-    depart(shipId) {
-        const ship = this.ships.get(shipId);
-        if (!ship) return false;
-        if (ship.status === "loading" || ship.status === "unloading") return false;
-        if (!ship.isEmpty()) return false;
-
+    _moveToProcessing(ship) {
+        if (ship.currentLineId === null) return false;
         const line = this.lines[ship.currentLineId - 1];
-        if (!line || line.currentShipId !== shipId) return false;
+        if (!line || line.currentShipId !== ship.id) return false;
 
-        const fromLineId = ship.currentLineId;
-        ship.status = "departed";
+        const oldLineId = ship.currentLineId;
+        line.currentShipId = null;
         ship.currentLineId = null;
-        this._emit("ship:departed", { shipId, lineId: fromLineId });
+        ship.status = "processing";
+        this.processingShips.put(ship.id, ship);
+        this._pushShipHistory(ship, "processing", `left line ${oldLineId}, ${ship.containerCount()} containers`);
 
-        // Part 4.4 — promote next waiting inside the line
-        const promoted = line.advance();
-        if (promoted) {
-            const nextShip = this.ships.get(promoted);
-            if (nextShip) {
-                nextShip.status = "docked";
-                this.dockingHistoryStack.push(promoted);
-                this._emit("ship:docked", { shipId: promoted, lineId: line.id });
+        if (!line.ships.isEmpty()) {
+            const promoted = line.advance();
+            if (promoted) {
+                const next = this.ships.get(promoted);
+                if (next) {
+                    next.status = "docked";
+                    this.dockingHistoryStack.push(promoted);
+                    this._pushShipHistory(next, "docked", `line ${oldLineId} (promoted)`);
+                    this._emit("ship:docked", { shipId: promoted, lineId: oldLineId });
+                }
             }
         }
 
-        // Part 4.5 — at-sea promotion (by priority)
         if (!this.atSeaQueue.isEmpty() && !line.isFull()) {
-            const next = this.atSeaQueue.pop();
-            const overShip = this.ships.get(next.shipId);
+            const overItem = this.atSeaQueue.pop();
+            const overShip = this.ships.get(overItem.shipId);
             if (overShip) {
-                line.enqueue(overShip, next.seq);
+                line.enqueue(overShip, overItem.seq);
                 overShip.currentLineId = line.id;
                 this._emit("ship:arrived", { shipId: overShip.id, lineId: line.id });
                 if (line.currentShipId === null) {
                     line.advance();
                     overShip.status = "docked";
                     this.dockingHistoryStack.push(overShip.id);
+                    this._pushShipHistory(overShip, "docked", `line ${line.id} (from at-sea)`);
                     this._emit("ship:docked", { shipId: overShip.id, lineId: line.id });
                 } else {
                     overShip.status = "waiting";
+                    this._pushShipHistory(overShip, "waiting", `line ${line.id} (from at-sea)`);
+                }
+            }
+        }
+
+        this._emit("ship:processing", { shipId: ship.id, lineId: oldLineId });
+        this._emit("line:updated", { lineId: oldLineId, snapshot: line.snapshot(this) });
+        this._emit("data:updated", { kind: "ship" });
+        return true;
+    }
+
+    depart(shipId) {
+        const ship = this.ships.get(shipId);
+        if (!ship) return false;
+        if (ship.status === "loading" || ship.status === "unloading") return false;
+
+        // 🚨 FIX: Allow departure from processing even with cargo
+        if (this.processingShips.has(shipId)) {
+            this.processingShips.delete(shipId);
+            ship.status = "departed";
+            ship.currentLineId = null;
+            this._pushShipHistory(ship, "departed", "from processing (loaded)");
+            this._emit("ship:departed", { shipId, lineId: null });
+            this._emit("data:updated", { kind: "ship" });
+            return true;
+        }
+
+        if (!ship.isEmpty()) return false;
+
+        if (ship.currentLineId === null) return false;
+        const line = this.lines[ship.currentLineId - 1];
+        if (!line || line.currentShipId !== shipId) return false;
+
+        const fromLineId = ship.currentLineId;
+        ship.status = "departed";
+        ship.currentLineId = null;
+        this._pushShipHistory(ship, "departed", `from line ${fromLineId}`);
+        this._emit("ship:departed", { shipId, lineId: fromLineId });
+
+        if (!line.ships.isEmpty()) {
+            const promoted = line.advance();
+            if (promoted) {
+                const next = this.ships.get(promoted);
+                if (next) {
+                    next.status = "docked";
+                    this.dockingHistoryStack.push(promoted);
+                    this._pushShipHistory(next, "docked", `line ${line.id} (promoted)`);
+                    this._emit("ship:docked", { shipId: promoted, lineId: line.id });
+                }
+            }
+        }
+
+        if (!this.atSeaQueue.isEmpty() && !line.isFull()) {
+            const overItem = this.atSeaQueue.pop();
+            const overShip = this.ships.get(overItem.shipId);
+            if (overShip) {
+                line.enqueue(overShip, overItem.seq);
+                overShip.currentLineId = line.id;
+                this._emit("ship:arrived", { shipId: overShip.id, lineId: line.id });
+                if (line.currentShipId === null) {
+                    line.advance();
+                    overShip.status = "docked";
+                    this.dockingHistoryStack.push(overShip.id);
+                    this._pushShipHistory(overShip, "docked", `line ${line.id} (from at-sea)`);
+                    this._emit("ship:docked", { shipId: overShip.id, lineId: line.id });
+                } else {
+                    overShip.status = "waiting";
+                    this._pushShipHistory(overShip, "waiting", `line ${line.id} (from at-sea)`);
                 }
             }
         }
@@ -221,94 +265,97 @@ export class Port {
         return true;
     }
 
-    // ---------- Loading / Unloading (Part 6.3) ----------
-
-    // O(1) — starts a loading operation on the active ship (Part 4.6)
     startLoading(shipId, containerId) {
         const ship = this.ships.get(shipId);
         if (!ship) return false;
-        const line = this.lines[ship.currentLineId - 1];
-        if (!line || line.currentShipId !== shipId) return false;
+        const inLine = ship.currentLineId !== null &&
+            this.lines[ship.currentLineId - 1]?.currentShipId === shipId;
+        const inProcessing = this.processingShips.has(shipId);
+        if (!inLine && !inProcessing) return false;
         if (ship.status === "loading" || ship.status === "unloading") return false;
         if (ship.isFull()) return false;
         if (!this.containers.has(containerId)) return false;
         if (!this.yard.has(containerId)) return false;
 
-        this.yard.delete(containerId);
+        if (ship.listContainers().includes(containerId)) {
+            return false;
+        }
 
+        this.yard.delete(containerId);
         ship.status = "loading";
         ship.activeContainerId = containerId;
         ship.operationStartedAt = this.simTime;
         ship.operationDurationMs = LOAD_DURATION_MS;
         ship.progress = 0;
 
-        this._emit("ship:loadingStarted", {
-            shipId,
-            containerId,
-            durationMs: LOAD_DURATION_MS,
-        });
-        this._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this) });
+        this._pushShipHistory(ship, "loading", containerId);
+        const container = this.containers.get(containerId);
+        if (container) this._pushContainerHistory(container, "loading", `ship ${shipId}`);
+
+        this._emit("ship:loadingStarted", { shipId, containerId, durationMs: LOAD_DURATION_MS });
+        if (inLine) {
+            const line = this.lines[ship.currentLineId - 1];
+            this._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this) });
+        }
         return true;
     }
 
-    // O(1) — starts an unloading operation on the active ship
     startUnloading(shipId) {
         const ship = this.ships.get(shipId);
         if (!ship) return false;
-        const line = this.lines[ship.currentLineId - 1];
-        if (!line || line.currentShipId !== shipId) return false;
+        const inLine = ship.currentLineId !== null &&
+            this.lines[ship.currentLineId - 1]?.currentShipId === shipId;
+        const inProcessing = this.processingShips.has(shipId);
+        if (!inLine && !inProcessing) return false;
         if (ship.status === "loading" || ship.status === "unloading") return false;
         if (ship.isEmpty()) return false;
 
-        const containerId = ship.peekTop();
-
         ship.status = "unloading";
-        ship.activeContainerId = containerId;
+        ship.activeContainerId = ship.peekTop();
         ship.operationStartedAt = this.simTime;
         ship.operationDurationMs = UNLOAD_DURATION_MS;
         ship.progress = 0;
 
-        this._emit("ship:unloadingStarted", {
-            shipId,
-            containerId,
-            durationMs: UNLOAD_DURATION_MS,
-        });
-        this._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this) });
+        this._pushShipHistory(ship, "unloading", ship.activeContainerId);
+        const container = this.containers.get(ship.activeContainerId);
+        if (container) this._pushContainerHistory(container, "unloading", `ship ${shipId}`);
+
+        this._emit("ship:unloadingStarted", { shipId, containerId: ship.activeContainerId, durationMs: UNLOAD_DURATION_MS });
         return true;
     }
 
-    // O(n) — called by Engine.tick(); advances progress on all active loading/unloading ships
     updateProgress() {
+        const applyProgress = (ship, line) => {
+            const elapsed = this.simTime - ship.operationStartedAt;
+            ship.progress = Math.min(1.0, elapsed / ship.operationDurationMs);
+            this._emit("ship:progress", { shipId: ship.id, containerId: ship.activeContainerId, progress: ship.progress });
+            if (ship.progress >= 1.0) this._finalizeOperation(ship, line);
+        };
+
         for (const line of this.lines) {
             if (line.currentShipId === null) continue;
             const ship = this.ships.get(line.currentShipId);
             if (!ship) continue;
             if (ship.status !== "loading" && ship.status !== "unloading") continue;
+            applyProgress(ship, line);
+        }
 
-            const elapsed = this.simTime - ship.operationStartedAt;
-            ship.progress = Math.min(1.0, elapsed / ship.operationDurationMs);
-
-            this._emit("ship:progress", {
-                shipId: ship.id,
-                containerId: ship.activeContainerId,
-                progress: ship.progress,
-            });
-
-            if (ship.progress >= 1.0) this._finalizeOperation(ship, line);
+        for (const ship of this.processingShips.values()) {
+            if (ship.status !== "loading" && ship.status !== "unloading") continue;
+            applyProgress(ship, null);
         }
     }
 
-    // O(n log n) — finalize a loading/unloading operation
     _finalizeOperation(ship, line) {
         const containerId = ship.activeContainerId;
         const container = this.containers.get(containerId);
+        const wasLoading = ship.status === "loading";
 
-        if (ship.status === "loading") {
+        if (wasLoading) {
             ship.load(containerId);
-            if (container) {
-                container.status = "onShip";
-                container.shipId = ship.id;
-            }
+            if (container) { container.status = "onShip"; container.shipId = ship.id; }
+            this._pushShipHistory(ship, "loaded", containerId);
+            if (container) this._pushContainerHistory(container, "loaded", `ship ${ship.id}`);
             this._emit("ship:loadingFinished", { shipId: ship.id, containerId });
         } else {
             ship.unload();
@@ -318,20 +365,41 @@ export class Port {
                 this.yard.put(containerId, container);
                 this.yardQueue.enqueue(containerId);
             }
+            this._pushShipHistory(ship, "unloaded", containerId);
+            if (container) this._pushContainerHistory(container, "unloaded", `ship ${ship.id}`);
             this.unloadStack.push({ shipId: ship.id, containerId });
             this._emit("ship:unloadingFinished", { shipId: ship.id, containerId });
         }
 
-        ship.status = "ready";
         ship.activeContainerId = null;
         ship.progress = 0;
         ship.operationStartedAt = null;
         ship.operationDurationMs = null;
 
-        this._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this) });
+        if (wasLoading && line) {
+            const yardEmpty = this.yard.size() === 0;
+
+            if (yardEmpty) {
+                ship.status = "ready";
+                this._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this) });
+                return;
+            }
+
+            if (ship.isFull()) {
+                ship.status = "ready";
+                this._moveToProcessing(ship);
+                return;
+            }
+        }
+
+        ship.status = "ready";
+        if (line) {
+            this._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this) });
+        } else {
+            this._emit("data:updated", { kind: "ship" });
+        }
     }
 
-    // O(1) — undo the last unload (T12)
     undoUnload() {
         if (this.unloadStack.isEmpty()) return false;
         const entry = this.unloadStack.pop();
@@ -339,31 +407,24 @@ export class Port {
         const container = this.containers.get(entry.containerId);
         if (!ship || !container) return false;
         if (ship.isFull()) return false;
-
         ship.load(entry.containerId);
         container.status = "onShip";
         container.shipId = ship.id;
         this.yard.delete(entry.containerId);
-
+        this._pushShipHistory(ship, "undo-unload", entry.containerId);
+        this._pushContainerHistory(container, "undo-unload", `ship ${ship.id}`);
         this._emit("data:updated", { kind: "container" });
         return true;
     }
 
-    // ---------- Existing Queries ----------
-
-    findContainer(containerId) {
-        return this.containers.get(containerId);
-    }
+    findContainer(containerId) { return this.containers.get(containerId); }
 
     containersOfShip(shipId) {
         const out = [];
-        for (const c of this.containers.values()) {
-            if (c.shipId === shipId) out.push(c);
-        }
+        for (const c of this.containers.values()) if (c.shipId === shipId) out.push(c);
         return out;
     }
 
-    // O(n log k) — MinHeap (T14)
     topHeaviest(k) {
         if (k <= 0) return [];
         const heap = new MinHeap();
@@ -372,32 +433,54 @@ export class Port {
             if (heap.size() > k) heap.extractMin();
         }
         const out = [];
-        while (!heap.isEmpty()) {
-            const item = heap.extractMin();
-            out.push([item.key, item.value]);
-        }
+        while (!heap.isEmpty()) { const it = heap.extractMin(); out.push([it.key, it.value]); }
         out.sort((a, b) => b[1] - a[1]);
         return out;
     }
 
-    dockingHistory() {
-        return this.dockingHistoryStack.toArray();
-    }
+    dockingHistory() { return this.dockingHistoryStack.toArray(); }
 
     yardContents() {
-        return this.yard.values().map((c) => ({
-            id: c.id, weight: c.weight, dest: c.dest, status: c.status,
-        }));
+        return this.yard.values().map((c) => ({ id: c.id, weight: c.weight, dest: c.dest, status: c.status }));
+    }
+
+    getShipHistory(shipId) {
+        const s = this.ships.get(shipId);
+        return s ? s.history.slice() : [];
+    }
+
+    getContainerHistory(containerId) {
+        const c = this.containers.get(containerId);
+        return c ? c.history.slice() : [];
     }
 
     snapshot() {
         return {
             simTime: this.simTime,
             lines: this.lines.map((line) => line.snapshot(this)),
+            processing: this._processingSnapshot(),
             atSea: this._atSeaSnapshot(),
             yard: this.yardContents(),
             destinations: this._destinationSnapshot(),
         };
+    }
+
+    _processingSnapshot() {
+        const out = [];
+        for (const ship of this.processingShips.values()) {
+            out.push({
+                id: ship.id, name: ship.name,
+                priority: ship.priority,
+                priorityLabel: PRIORITY_LABELS[String(ship.priority)] || "Unknown",
+                state: ship.status,
+                capacity: ship.capacity,
+                used: ship.containerCount(),
+                activeContainerId: ship.activeContainerId,
+                progress: ship.progress,
+                containers: ship.listContainers(),
+            });
+        }
+        return out;
     }
 
     _atSeaSnapshot() {
@@ -412,6 +495,7 @@ export class Port {
                     id: ship.id, name: ship.name,
                     priority: ship.priority,
                     priorityLabel: PRIORITY_LABELS[String(ship.priority)] || "Unknown",
+                    state: ship.status,
                 });
             }
         }
@@ -435,8 +519,6 @@ export class Port {
         }
         return { unique, routes };
     }
-
-    // ---------- Index Queries ----------
 
     shipsSortedByArrival() { return this.arrivalIndex.inorder().map((e) => e.value); }
     shipsInArrivalRange(t1, t2) { return this.arrivalIndex.range(t1, t2).map((e) => e.value); }
