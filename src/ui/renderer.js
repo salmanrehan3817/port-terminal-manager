@@ -1,12 +1,4 @@
-// Main renderer (Part 9.1–9.7).
-// Owns the 4 line columns and coordinates ShipCard / LineColumn / SearchBar / RoutesPanel.
-// Update strategy (Part 9.6):
-//   - ship:progress  → targeted update of ONE progress bar
-//   - line:updated   → re-render that one column (LineColumn reuses existing cards)
-//   - data:updated   → refresh routes + yard
-//   - engine:tick    → refresh routes (Part 9.5)
-// No structures/domain imports. Only engine methods + snapshot objects.
-
+// Main renderer
 import { LineColumn } from "./line_column.js";
 import { SearchBar } from "./search_bar.js";
 import { RoutesPanel } from "./routes_panel.js";
@@ -14,7 +6,6 @@ import { DetailModal } from "./detail_model.js";
 import { ShipCard } from "./ship_card.js";
 
 export class Renderer {
-    // O(1) — cache containers + build the 4 columns + init sub-panels
     static init(engine) {
         this.engine = engine;
         this.shipMap = new Map();
@@ -22,18 +13,15 @@ export class Renderer {
         this.linesContainer = document.getElementById("linesContainer");
         this.atSeaList = document.getElementById("atSeaList");
         this.yardList = document.getElementById("yardList");
+        this.processingList = document.getElementById("processingList");
 
-        // Build 4 empty columns
         for (let id = 1; id <= 4; id++) {
             this.linesContainer.appendChild(LineColumn.create(id));
         }
 
-        // Sub-components
-        SearchBar.init(
-            engine,
+        SearchBar.init(engine,
             document.getElementById("searchInput"),
-            document.getElementById("searchResults")
-        );
+            document.getElementById("searchResults"));
 
         RoutesPanel.init(engine, {
             edgesEl: document.getElementById("routesEdges"),
@@ -42,9 +30,7 @@ export class Renderer {
             uniqueEl: document.getElementById("routesUnique"),
         });
 
-        // ─────────────────────────────────────────────────────
-        // Click handlers — ship card + yard card → detail modal
-        // ─────────────────────────────────────────────────────
+        // Click handlers
         this.linesContainer.addEventListener("click", (ev) => {
             const card = ev.target.closest(".ship-card");
             if (!card) return;
@@ -58,7 +44,6 @@ export class Renderer {
             const containerId = card.dataset.containerId;
             if (containerId) DetailModal.showContainer(containerId);
         });
-        this.processingList = document.getElementById("processingList");
 
         this.processingList.addEventListener("click", (ev) => {
             const card = ev.target.closest(".ship-card");
@@ -66,9 +51,16 @@ export class Renderer {
             const shipId = card.dataset.shipId;
             if (shipId) DetailModal.showShip(shipId);
         });
+
+        // 🚨 FIX: At Sea click handler
+        this.atSeaList.addEventListener("click", (ev) => {
+            const chip = ev.target.closest(".at-sea-chip");
+            if (!chip) return;
+            const shipId = chip.dataset.shipId;
+            if (shipId) DetailModal.showShip(shipId);
+        });
     }
 
-    // O(n) — full render; splits loading/unloading ships into processing view
     static renderAll(snapshot) {
         const { lines, processing } = this._splitShips(snapshot);
 
@@ -82,7 +74,6 @@ export class Renderer {
         RoutesPanel.refresh(snapshot);
     }
 
-    // O(1) — wire event handlers
     static subscribe(bus) {
         bus.on("engine:tick", (p) => this._onTick(p));
         bus.on("line:updated", (p) => this._onLineUpdated(p));
@@ -92,14 +83,10 @@ export class Renderer {
         bus.on("data:updated", (p) => this._onDataUpdated(p));
     }
 
-    // ----- Event handlers -----
-
-    // O(n) — refresh routes per Part 9.5
     static _onTick() {
         RoutesPanel.refresh(this.engine.getSnapshot());
     }
 
-    // O(n) — one column re-render + refresh processing/at-sea/yard
     static _onLineUpdated({ lineId, snapshot }) {
         const col = this.linesContainer.querySelector(`[data-line-id="${lineId}"]`);
         if (!col) return;
@@ -114,7 +101,6 @@ export class Renderer {
         this._renderYard(snap.yard);
     }
 
-    // O(1) — update progress + container id + label
     static _onShipProgress({ shipId, containerId, progress }) {
         const card = this.shipMap.get(shipId);
         if (!card) return;
@@ -128,7 +114,6 @@ export class Renderer {
         if (text) text.textContent = pct + "%";
         if (cidEl && containerId) cidEl.textContent = containerId;
 
-        // 👇 Force finish update for UI responsiveness
         if (progress >= 0.99) {
             const progressRow = card.querySelector(".ship-progress");
             if (progressRow) progressRow.classList.add("hidden");
@@ -146,7 +131,6 @@ export class Renderer {
                     loadingChip.className = "loaded-chip";
                     loadingChip.textContent = "✓ " + containerId;
 
-                    // 👇 INSTANT CAPACITY TEXT UPDATE
                     const capacityEl = card.querySelector(".ship-capacity");
                     if (capacityEl) {
                         const match = capacityEl.textContent.match(/Loaded:\s*(\d+)\s*\/\s*(\d+)/);
@@ -161,32 +145,49 @@ export class Renderer {
         }
     }
 
-    // O(1) — at-sea queue changed
     static _onShipOverflown() {
-        this._renderAtSea(this.engine.getSnapshot().atSea);
+        const snap = this.engine.getSnapshot();
+        this._renderAtSea(snap.atSea);
     }
 
-    // O(n) — routes and yard may have changed
+    static _onProcessingUpdated() {
+        const snap = this.engine.getSnapshot();
+        this._renderProcessing(snap.processing);
+        this._renderAtSea(snap.atSea);
+    }
+
     static _onDataUpdated() {
         const snap = this.engine.getSnapshot();
         RoutesPanel.refresh(snap);
         this._renderYard(snap.yard);
+        this._renderProcessing(snap.processing);
+        this._renderAtSea(snap.atSea);
     }
 
-    static _onDataUpdated() {
-        const snap = this.engine.getSnapshot();
-        RoutesPanel.refresh(snap);
-        this._renderYard(snap.yard);
-        this._renderProcessing(snap.processing);   // ← NEW
-        this._renderAtSea(snap.atSea);              // ← at-sea may also change
+    static _splitShips(snapshot) {
+        const processing = [];
+        const lines = [];
+
+        for (const s of (snapshot.processing || [])) processing.push(s);
+
+        for (const line of snapshot.lines) {
+            const visibleShips = [];
+            for (const s of line.ships) {
+                if (s.state === "loading" || s.state === "unloading") {
+                    processing.push(s);
+                } else {
+                    visibleShips.push(s);
+                }
+            }
+            lines.push({ id: line.id, ships: visibleShips });
+        }
+        return { lines, processing };
     }
 
-    // O(n) — processing panel: shows ships in loading/unloading/processing/ready states
     static _renderProcessing(processing) {
-        const el = document.getElementById("processingList");
+        const el = this.processingList;
         if (!el) return;
 
-        // Remove stale ship cards whose parent is this panel
         const seen = new Set();
         for (const s of processing) seen.add(s.id);
         for (const child of [...el.children]) {
@@ -198,7 +199,6 @@ export class Renderer {
 
         if (processing.length === 0) return;
 
-        // Reuse ShipCard elements from shipMap (same as line columns)
         for (const s of processing) {
             let card = this.shipMap.get(s.id);
             if (!card) {
@@ -210,9 +210,7 @@ export class Renderer {
             if (card.parentNode !== el) el.appendChild(card);
         }
     }
-    // ----- Sub-panel renderers -----
 
-    // O(n) — at-sea ships with priority color + name
     static _renderAtSea(atSea) {
         if (!this.atSeaList) return;
         if (atSea.length === 0) {
@@ -222,7 +220,7 @@ export class Renderer {
         this.atSeaList.innerHTML = atSea
             .map((s) => {
                 const label = s.priorityLabel || "Unknown";
-                return `<span class="chip at-sea-chip" data-priority="${s.priority}">`
+                return `<span class="chip at-sea-chip" data-ship-id="${s.id}" data-priority="${s.priority}">`
                     + `<span class="at-sea-id">${this._esc(s.id)}</span>`
                     + `<span class="at-sea-name">${this._esc(s.name || "")}</span>`
                     + `<span class="at-sea-label">${this._esc(label)}</span>`
@@ -231,14 +229,12 @@ export class Renderer {
             .join("");
     }
 
-    // O(1) — HTML escape helper
     static _esc(str) {
         return String(str).replace(/[&<>"']/g, (c) => ({
             "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
         })[c]);
     }
 
-    // O(n) — yard containers with labeled Name / Weight / Destination
     static _renderYard(yard) {
         if (!this.yardList) return;
         if (yard.length === 0) {
@@ -264,26 +260,5 @@ export class Renderer {
                     + `</div>`;
             })
             .join("");
-    }
-    // O(n) — split ships: loading/unloading go to processing view; rest stay in lines
-    static _splitShips(snapshot) {
-        const processing = [];
-        const lines = [];
-
-        // Include ships already in the processingShips area (from engine)
-        for (const s of (snapshot.processing || [])) processing.push(s);
-
-        for (const line of snapshot.lines) {
-            const visibleShips = [];
-            for (const s of line.ships) {
-                if (s.state === "loading" || s.state === "unloading") {
-                    processing.push(s);
-                } else {
-                    visibleShips.push(s);
-                }
-            }
-            lines.push({ id: line.id, ships: visibleShips });
-        }
-        return { lines, processing };
     }
 }

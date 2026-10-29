@@ -157,8 +157,8 @@ export class Engine {
 
     getSnapshot() { return this.port.snapshot(); }
 
-    addShip(shipId, name, arrival, priority = 2, capacity = 10) {
-        return this.port.addShip(shipId, name, arrival, priority, capacity);
+    addShip(shipId, name, arrival, priority = 2, capacity = 10, originPort = "N/A", destinationPort = "N/A") {
+        return this.port.addShip(shipId, name, arrival, priority, capacity, originPort, destinationPort);
     }
     addContainer(containerId, weight, dest) {
         return this.port.addContainer(containerId, weight, dest);

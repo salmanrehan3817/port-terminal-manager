@@ -37,6 +37,8 @@ export class ShipForm {
         const priorityEl = document.getElementById("shipPrioritySelect");
         const capEl = document.getElementById("shipCapacityInput");
         const lineEl = document.getElementById("shipLineSelect");
+        const originEl = document.getElementById("shipOriginInput"); // ← NEW
+        const destEl = document.getElementById("shipDestInput");     // ← NEW
 
         const id = idEl.value.trim();
         const name = nameEl.value.trim();
@@ -44,6 +46,8 @@ export class ShipForm {
         const priority = Number(priorityEl.value);
         const capacity = Number(capEl.value);
         const lineChoice = lineEl.value; // "auto" or "1".."4"
+        const originPort = originEl.value.trim() || "N/A";           // ← NEW
+        const destinationPort = destEl.value.trim() || "N/A";        // ← NEW
 
         // --- Validation ---
         if (!id) { this._show("Ship ID required", "error"); idEl.focus(); return; }
@@ -55,9 +59,11 @@ export class ShipForm {
         if (priority < -1 || priority > 5) {
             this._show("Priority must be -1..5", "error"); return;
         }
+        if (!originPort) { this._show("From Port required", "error"); originEl.focus(); return; }   // ← NEW
+        if (!destinationPort) { this._show("To Port required", "error"); destEl.focus(); return; } // ← NEW
 
         // --- Engine call #1: create ship ---
-        const created = this.engine.addShip(id, name, arrival, priority, capacity);
+        const created = this.engine.addShip(id, name, arrival, priority, capacity, originPort, destinationPort);
         if (!created) {
             this._show(`Ship "${id}" rejected — duplicate ID or invalid priority`, "error");
             return;
@@ -88,6 +94,8 @@ export class ShipForm {
         document.getElementById("shipCapacityInput").value = "10";
         document.getElementById("shipPrioritySelect").value = "2";
         document.getElementById("shipLineSelect").value = "auto";
+        document.getElementById("shipOriginInput").value = "";  // ← NEW
+        document.getElementById("shipDestInput").value = "";     // ← NEW
         idEl.focus();
     }
 

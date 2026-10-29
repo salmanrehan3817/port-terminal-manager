@@ -49,6 +49,11 @@ export class DetailModal {
         <div class="detail-row"><span class="detail-label">Name</span><span class="detail-value">${this._esc(ship.name)}</span></div>
         <div class="detail-row"><span class="detail-label">Priority</span><span class="detail-value"><span class="detail-badge" data-priority="${ship.priority}">${priorityLabel}</span></span></div>
         <div class="detail-row"><span class="detail-label">Arrival</span><span class="detail-value">${ship.arrival}</span></div>
+        
+        <!-- 🚨 NEW: From Port & To Port -->
+        <div class="detail-row"><span class="detail-label">From Port</span><span class="detail-value">${this._esc(ship.originPort || "N/A")}</span></div>
+        <div class="detail-row"><span class="detail-label">To Port</span><span class="detail-value">${this._esc(ship.destinationPort || "N/A")}</span></div>
+        
       </div>
 
       <div class="detail-section">
@@ -61,13 +66,13 @@ export class DetailModal {
       </div>
 
       <div class="detail-section">
-  <div class="detail-section-title">Cargo</div>
-  <div class="detail-row"><span class="detail-label">Capacity</span><span class="detail-value">${ship.containerCount()} / ${ship.capacity}</span></div>
-  <div class="detail-row"><span class="detail-label">Total Weight</span><span class="detail-value">${totalWeight}</span></div>
-  ${containers.length === 0
+        <div class="detail-section-title">Cargo</div>
+        <div class="detail-row"><span class="detail-label">Capacity</span><span class="detail-value">${ship.containerCount()} / ${ship.capacity}</span></div>
+        <div class="detail-row"><span class="detail-label">Total Weight</span><span class="detail-value">${totalWeight}</span></div>
+        ${containers.length === 0
         ? `<div class="detail-empty">No containers on board.</div>`
         : `<div class="detail-container-list">${containers.map((cid) => `<span class="detail-container-chip">${this._esc(cid)}</span>`).join("")}</div>`}
-</div>
+      </div>
 
       ${this._renderHistory(history)}
     `;
@@ -80,7 +85,6 @@ export class DetailModal {
     if (!c) return;
 
     const ship = c.shipId ? this.engine.port.ships.get(c.shipId) : null;
-    const shipLineId = ship ? ship.currentLineId : null;
     const history = c.history || [];
 
     this.titleEl.textContent = `Container · ${this._esc(c.id)}`;
@@ -96,8 +100,14 @@ export class DetailModal {
       <div class="detail-section">
         <div class="detail-section-title">Location</div>
         <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">${this._esc(c.status)}</span></div>
-        <div class="detail-row"><span class="detail-label">Ship</span><span class="detail-value">${ship ? this._esc(ship.id) + " (" + this._esc(ship.name) + ")" : "— (in yard)"}</span></div>
-        ${ship ? `<div class="detail-row"><span class="detail-label">Line</span><span class="detail-value">${shipLineId ? "Line " + shipLineId : "—"}</span></div>` : ""}
+        
+        <!-- Sirf tab Ship show karein jab container ship par ho -->
+        ${ship ? `
+        <div class="detail-row">
+          <span class="detail-label">Ship</span>
+          <span class="detail-value">${this._esc(ship.id)} (${this._esc(ship.name)})</span>
+        </div>` : ""}
+        
       </div>
 
       ${this._renderHistory(history)}
