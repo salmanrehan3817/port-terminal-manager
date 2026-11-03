@@ -100,7 +100,7 @@ export class Port {
     }
 
     assignToLine(ship, seq) {
-        ship.requestedLineId = null; // Auto mode
+        ship.requestedLineId = null;
         let target = null;
         for (const line of this.lines) {
             if (line.isFull()) continue;
@@ -122,79 +122,52 @@ export class Port {
         const target = this.lines[lineId - 1];
         if (!target) return false;
 
-        // 🚨 PRIORITY PREEMPTION LOGIC
         if (target.isFull()) {
-            const drained = [];
-            while (!target.ships.isEmpty()) {
-                drained.push(target.ships.pop());
-            }
-            // Since PriorityQueue pops highest priority first, the last item is the lowest priority
-            const worstItem = drained[drained.length - 1];
-            const worstShip = this.ships.get(worstItem.shipId);
+            const waitCapacity = target.capacity - (target.currentShipId ? 1 : 0);
+            const evicted = target.ships.pushWithEviction(ship.priority, seq, ship.id, waitCapacity);
 
-            if (worstShip && ship.priority < worstShip.priority) {
-                // New ship has higher urgency. Preempt!
-                drained.pop();
-                this.atSeaQueue.push(worstItem.priority, worstItem.seq, worstItem.shipId);
-                worstShip.status = "waitingAtSea";
-                worstShip.currentLineId = null;
-                this._pushShipHistory(worstShip, "overflown", `preempted by ${ship.id} → at sea`);
-                this._emit("ship:overflown", { shipId: worstShip.id });
+            if (evicted === null) {
+                ship.currentLineId = target.id;
+                ship.status = "waiting";
+                this._pushShipHistory(ship, "waiting", `line ${target.id}`);
+                this._emit("ship:arrived", { shipId: ship.id, lineId: target.id });
+                this._emit("line:updated", { lineId: target.id, snapshot: target.snapshot(this) });
+                return true;
+            } else if (evicted.shipId === ship.id) {
+                this.atSeaQueue.push(ship.priority, seq, ship.id);
+                ship.status = "waitingAtSea";
+                ship.currentLineId = null;
+                this._pushShipHistory(ship, "overflown", `line ${lineId} full & low priority → at sea`);
+                this._emit("ship:overflown", { shipId: ship.id });
+                return false;
+            } else {
+                const evictedShip = this.ships.get(evicted.shipId);
+                this.atSeaQueue.push(evictedShip.priority, evicted.seq, evictedShip.id);
+                evictedShip.status = "waitingAtSea";
+                evictedShip.currentLineId = null;
+                this._pushShipHistory(evictedShip, "overflown", `preempted by ${ship.id} → at sea`);
+                this._emit("ship:overflown", { shipId: evictedShip.id });
 
-                for (const item of drained) {
-                    target.ships.push(item.priority, item.seq, item.shipId);
-                }
-
-                target.enqueue(ship, seq);
                 ship.currentLineId = target.id;
                 ship.status = "waiting";
                 this._pushShipHistory(ship, "waiting", `line ${target.id} (preempted lower priority)`);
                 this._emit("ship:arrived", { shipId: ship.id, lineId: target.id });
                 this._emit("line:updated", { lineId: target.id, snapshot: target.snapshot(this) });
                 return true;
-            } else {
-                for (const item of drained) {
-                    target.ships.push(item.priority, item.seq, item.shipId);
-                }
-                this.atSeaQueue.push(ship.priority, seq, ship.id);
-                ship.status = "waitingAtSea";
-                ship.currentLineId = null;
-                this._pushShipHistory(ship, "overflown", `line ${lineId} full → at sea`);
-                this._emit("ship:overflown", { shipId: ship.id });
-                return false;
             }
         } else {
-            this.atSeaQueue.push(ship.priority, seq, ship.id);
-            ship.status = "waitingAtSea";
-            ship.currentLineId = null;
-
-            const overItem = this._popFromAtSeaForLine(lineId);
-            if (overItem) {
-                const overShip = this.ships.get(overItem.shipId);
-                if (overShip) {
-                    this._enqueueIntoTarget(target, overShip, overItem.seq);
-                    return overItem.shipId === ship.id;
-                }
-            }
-            return false;
+            this._enqueueIntoTarget(target, ship, seq);
+            return true;
         }
     }
 
+    // 🚨 FIX: Ab ship shuru mein "waiting" hi rahegi. Docked Engine karega.
     _enqueueIntoTarget(target, ship, seq) {
         target.enqueue(ship, seq);
         ship.currentLineId = target.id;
+        ship.status = "waiting"; // Hamesha waiting
+        this._pushShipHistory(ship, "waiting", `line ${target.id}`);
         this._emit("ship:arrived", { shipId: ship.id, lineId: target.id });
-
-        if (target.currentShipId === null) {
-            target.advance();
-            ship.status = "docked";
-            this.dockingHistoryStack.push(ship.id);
-            this._pushShipHistory(ship, "docked", `line ${target.id}`);
-            this._emit("ship:docked", { shipId: ship.id, lineId: target.id });
-        } else {
-            ship.status = "waiting";
-            this._pushShipHistory(ship, "waiting", `line ${target.id}`);
-        }
         this._emit("line:updated", { lineId: target.id, snapshot: target.snapshot(this) });
     }
 
@@ -247,19 +220,7 @@ export class Port {
             if (overItem) {
                 const overShip = this.ships.get(overItem.shipId);
                 if (overShip) {
-                    line.enqueue(overShip, overItem.seq);
-                    overShip.currentLineId = line.id;
-                    this._emit("ship:arrived", { shipId: overShip.id, lineId: line.id });
-                    if (line.currentShipId === null) {
-                        line.advance();
-                        overShip.status = "docked";
-                        this.dockingHistoryStack.push(overShip.id);
-                        this._pushShipHistory(overShip, "docked", `line ${line.id} (from at-sea)`);
-                        this._emit("ship:docked", { shipId: overShip.id, lineId: line.id });
-                    } else {
-                        overShip.status = "waiting";
-                        this._pushShipHistory(overShip, "waiting", `line ${line.id} (from at-sea)`);
-                    }
+                    this._enqueueIntoTarget(line, overShip, overItem.seq);
                 }
             }
         }
@@ -315,19 +276,7 @@ export class Port {
             if (overItem) {
                 const overShip = this.ships.get(overItem.shipId);
                 if (overShip) {
-                    line.enqueue(overShip, overItem.seq);
-                    overShip.currentLineId = line.id;
-                    this._emit("ship:arrived", { shipId: overShip.id, lineId: line.id });
-                    if (line.currentShipId === null) {
-                        line.advance();
-                        overShip.status = "docked";
-                        this.dockingHistoryStack.push(overShip.id);
-                        this._pushShipHistory(overShip, "docked", `line ${line.id} (from at-sea)`);
-                        this._emit("ship:docked", { shipId: overShip.id, lineId: line.id });
-                    } else {
-                        overShip.status = "waiting";
-                        this._pushShipHistory(overShip, "waiting", `line ${line.id} (from at-sea)`);
-                    }
+                    this._enqueueIntoTarget(line, overShip, overItem.seq);
                 }
             }
         }
@@ -449,13 +398,11 @@ export class Port {
 
         if (wasLoading && line) {
             const yardEmpty = this.yard.size() === 0;
-
             if (yardEmpty) {
                 ship.status = "ready";
                 this._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this) });
                 return;
             }
-
             if (ship.isFull()) {
                 ship.status = "ready";
                 this._moveToProcessing(ship);

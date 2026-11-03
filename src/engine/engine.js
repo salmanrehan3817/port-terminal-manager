@@ -52,74 +52,46 @@ export class Engine {
     }
 
     _autoLoadNext() {
-        // 🚨 FIX: 1. Sab se pehle processing wali ships ko check karein
-        // Agar ship "processing" ya "ready" hai, toh usay foran depart kar dein
+        // 1. Auto-Depart: Remove ships from processing if they are done loading/unloading
         for (const ship of [...this.port.processingShips.values()]) {
-            if (ship.status === "processing" || ship.status === "ready") {
+            if (ship.status === "ready" || ship.status === "processing") {
                 this.port.depart(ship.id);
             }
         }
 
-        // 2. Agar koi ship load/unload ho rahi hai toh interrupt na karein
+        // 2. Promote: Pick highest priority waiting ship and make it docked if line is empty
         for (const line of this.port.lines) {
-            if (line.currentShipId === null) continue;
-            const s = this.port.ships.get(line.currentShipId);
-            if (s && (s.status === "loading" || s.status === "unloading")) return;
-        }
-        for (const s of this.port.processingShips.values()) {
-            if (s.status === "loading" || s.status === "unloading") return;
+            if (line.currentShipId === null && !line.ships.isEmpty()) {
+                const top = line.ships.pop();
+                const ship = this.port.ships.get(top.shipId);
+                line.currentShipId = ship.id;
+                ship.status = "docked";
+                this.port._pushShipHistory(ship, "docked", `line ${line.id} (priority promoted)`);
+                this.port._emit("ship:docked", { shipId: ship.id, lineId: line.id });
+                this.port._emit("line:updated", { lineId: line.id, snapshot: line.snapshot(this.port) });
+            }
         }
 
-        // 3. Agar yard empty hai toh loading rok dein
-        if (this.port.yard.size() === 0) return;
-
-        // 4. Collect candidate ships (active + waiting in lines)
-        const candidates = [];
+        // 3. Process: Start loading docked ships based on global priority
+        let bestDocked = null;
         for (const line of this.port.lines) {
             if (line.currentShipId !== null) {
-                const s = this.port.ships.get(line.currentShipId);
-                if (s && !s.isFull()) candidates.push({ ship: s, line, isActive: true });
-            }
-            const drained = [];
-            while (!line.ships.isEmpty()) {
-                const item = line.ships.pop();
-                drained.push(item);
-                const s = this.port.ships.get(item.shipId);
-                if (s && !s.isFull()) candidates.push({ ship: s, line, isActive: false });
-            }
-            for (const item of drained) {
-                line.ships.push(item.priority, item.seq, item.shipId);
+                const ship = this.port.ships.get(line.currentShipId);
+                if (ship && ship.status === "docked") {
+                    if (!bestDocked || ship.priority < bestDocked.priority) {
+                        bestDocked = ship;
+                    }
+                }
             }
         }
-        if (candidates.length === 0) return;
 
-        // 5. Sort by priority
-        candidates.sort((a, b) => {
-            if (a.ship.priority !== b.ship.priority) return a.ship.priority - b.ship.priority;
-            if (a.ship.arrival !== b.ship.arrival) return a.ship.arrival - b.ship.arrival;
-            return a.ship.id < b.ship.id ? -1 : 1;
-        });
-
-        const chosen = candidates[0];
-
-        // 6. Preempt if chosen is waiting
-        if (!chosen.isActive) this._preempt(chosen.line, chosen.ship.id);
-
-        // 7. FIFO — get next container from yardQueue (skip stale entries)
-        let nextId = null;
-        while (!this.port.yardQueue.isEmpty()) {
-            const front = this.port.yardQueue.front();
-            if (this.port.yard.has(front)) { nextId = front; break; }
-            this.port.yardQueue.dequeue();
-        }
-        if (!nextId) return;
-
-        // 8. Start loading; dequeue from FIFO ONLY on success
-        const ok = this.port.startLoading(chosen.ship.id, nextId);
-        if (ok) {
-            this.port.yardQueue.dequeue();
-        } else {
-            if (this.port.yardQueue.front() === nextId) this.port.yardQueue.dequeue();
+        if (bestDocked) {
+            const yard = this.port.yard.values();
+            if (yard.length > 0) {
+                if (bestDocked.status === "docked") {
+                    this.port.startLoading(bestDocked.id, yard[0].id);
+                }
+            }
         }
     }
 
