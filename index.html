@@ -26,6 +26,8 @@
         </select>
         <button id="startBtn" class="btn btn-start">Start</button>
         <button id="stopBtn" class="btn btn-stop">Stop</button>
+        <!-- 🚨 NAYA: Theme Toggle Button -->
+        <button id="themeToggle" class="btn theme-toggle" title="Toggle Theme">☀️</button>
       </div>
     </header>
 
@@ -82,16 +84,16 @@
           </select>
         </div>
 
-        <!-- 🚨 NEW: From Port & To Port -->
+        <!-- From Port & To Port -->
         <div class="form-field">
           <label for="shipOriginInput" class="form-label">From Port</label>
-          <input type="text" id="shipOriginInput" class="form-input" placeholder="e.g." value="" required
+          <input type="text" id="shipOriginInput" class="form-input" placeholder="e.g. Mumbai" value="Mumbai" required
             autocomplete="off" />
         </div>
 
         <div class="form-field">
           <label for="shipDestInput" class="form-label">To Port</label>
-          <input type="text" id="shipDestInput" class="form-input" placeholder="e.g." value="" required
+          <input type="text" id="shipDestInput" class="form-input" placeholder="e.g. Dubai" value="Dubai" required
             autocomplete="off" />
         </div>
 
